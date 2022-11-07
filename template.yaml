@@ -1,0 +1,108 @@
+AWSTemplateFormatVersion: '2010-09-09'
+Transform: AWS::Serverless-2016-10-31
+Description: >
+  SAM Template for canary deployment
+
+Globals:
+  Function:
+    Timeout: 3
+
+Resources:
+  FirstFunction:
+    Type: AWS::Serverless::Function 
+    Properties:
+      CodeUri: first_function/
+      Handler: app.lambda_handler
+      Runtime: python3.9
+      AutoPublishAlias: live
+      DeploymentPreference:
+        Type: Canary10Percent5Minutes
+        Alarms:
+          - !Ref FirstFunctionCanaryAlarm
+        Architectures:
+          - x86_64
+      Events:
+        FirstFunctionEvent:
+          Type: Api 
+          Properties:
+            Path: /first-function
+            Method: get
+
+  SecondFunction:
+    Type: AWS::Serverless::Function
+    Properties:
+      CodeUri: second_function/
+      Handler: app.lambda_handler
+      Runtime: python3.9
+      AutoPublishAlias: live
+      DeploymentPreference:
+        Type: Canary10Percent5Minutes
+        Alarms:
+          - !Ref SecondFunctionCanaryAlarm
+        Architectures:
+          - x86_64
+      Events:
+        SecondFunctionEvent:
+          Type: Api 
+          Properties:
+            Path: /second-function
+            Method: get
+
+  FirstFunctionCanaryAlarm:
+    Type: AWS::CloudWatch::Alarm
+    Properties:
+      AlarmDescription: First Lambda function canary errors
+      ComparisonOperator: GreaterThanThreshold
+      EvaluationPeriods: 2
+      MetricName: Errors
+      Namespace: AWS/Lambda
+      Period: 60
+      Statistic: Sum
+      Threshold: 0
+      Dimensions:
+        - Name: Resource
+          Value: !Sub "${FirstFunction}:live"
+        - Name: FunctionName
+          Value: !Ref FirstFunction
+        - Name: ExecutedVersion
+          Value: !GetAtt FirstFunction.Version.Version
+  
+  SecondFunctionCanaryAlarm:
+    Type: AWS::CloudWatch::Alarm
+    Properties:
+      AlarmDescription: Second Lambda function canary errors
+      ComparisonOperator: GreaterThanThreshold
+      EvaluationPeriods: 2
+      MetricName: Errors
+      Namespace: AWS/Lambda
+      Period: 60
+      Statistic: Sum
+      Threshold: 0
+      Dimensions:
+        - Name: Resource
+          Value: !Sub "${SecondFunction}:live"
+        - Name: FunctionName
+          Value: !Ref SecondFunction
+        - Name: ExecutedVersion
+          Value: !GetAtt SecondFunction.Version.Version
+
+
+Outputs:
+  FirstFunctionApi:
+    Description: "API Gateway endpoint URL for Prod stage for first function"
+    Value: !Sub "https://${ServerlessRestApi}.execute-api.${AWS::Region}.amazonaws.com/Prod/first-function/"
+  SecondFunctionApi:
+    Description: "API Gateway endpoint URL for Prod stage for second function"
+    Value: !Sub "https://${ServerlessRestApi}.execute-api.${AWS::Region}.amazonaws.com/Prod/second-function"
+  FirstFunction:
+    Description: "First Function Lambda ARN"
+    Value: !GetAtt FirstFunction.Arn
+  FirstFunctionIamRole:
+    Description: "Implicit IAM Role created for First function"
+    Value: !GetAtt FirstFunctionRole.Arn
+  SecondFunction:
+    Description: "Second Function Lambda ARN"
+    Value: !GetAtt SecondFunction.Arn
+  SecondFunctionIamRole:
+    Description: "Implicit IAM Role created for Second function"
+    Value: !GetAtt SecondFunctionRole.Arn
